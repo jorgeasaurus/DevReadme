@@ -32,7 +32,9 @@ function Get-DailyReadme {
     
     if ($days -lt 0) {
         $months--
-        $days += [DateTime]::DaysInMonth($today.Year, $today.Month - 1)
+        $prevMonth = if ($today.Month -eq 1) { 12 } else { $today.Month - 1 }
+        $prevYear = if ($today.Month -eq 1) { $today.Year - 1 } else { $today.Year }
+        $days += [DateTime]::DaysInMonth($prevYear, $prevMonth)
     }
     if ($months -lt 0) {
         $years--
@@ -242,7 +244,7 @@ function Get-LocCounterOneRepo {
     )
     
     foreach ($node in $History.edges) {
-        if ($node.node.author.user.id -eq $script:OWNER_ID.id) {
+        if ($node.node.author.user -ne $null -and $node.node.author.user.id -eq $script:OWNER_ID.id) {
             $MyCommits++
             $AdditionTotal += $node.node.additions
             $DeletionTotal += $node.node.deletions
