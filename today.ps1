@@ -242,7 +242,7 @@ function Get-LocCounterOneRepo {
     )
     
     foreach ($node in $History.edges) {
-        if ($node.node.author.user -eq $script:OWNER_ID) {
+        if ($node.node.author.user.id -eq $script:OWNER_ID.id) {
             $MyCommits++
             $AdditionTotal += $node.node.additions
             $DeletionTotal += $node.node.deletions
@@ -709,7 +709,7 @@ Update-SvgOverwrite -Filename "light_mode.svg" -AgeData $ageData[0] -CommitData 
     -FollowerData $followerData[0] -LocData $totalLoc[0][0..($totalLoc[0].Count - 2)]
 
 # Calculate total time
-$totalTime = $userData[1] + $ageData[1] + $totalLoc[1] + $commitData[1] + $starData[1] + $repoData[1] + $contribData[1]
+$totalTime = $userData[1] + $ageData[1] + $totalLoc[1] + $commitData[1] + $starData[1] + $repoData[1] + $contribData[1] + $followerData[1]
 
 # Print summary
 Write-Host ""
