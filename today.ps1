@@ -20,6 +20,21 @@ $QUERY_COUNT = @{
 }
 $OWNER_ID = $null
 
+function Get-SHA256Hash {
+    param(
+        [string]$InputString
+    )
+    
+    $hasher = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($InputString))
+        return -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+    }
+    finally {
+        $hasher.Dispose()
+    }
+}
+
 function Get-DailyReadme {
     param(
         [DateTime]$Birthday
@@ -327,9 +342,7 @@ function New-CacheBuilder {
     )
     
     $cached = $true
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($USER_NAME))
-    $hashString = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+    $hashString = Get-SHA256Hash -InputString $USER_NAME
     $filename = "cache/$hashString.txt"
     
     if (Test-Path $filename) {
@@ -351,16 +364,15 @@ function New-CacheBuilder {
         $data = Get-Content $filename
     }
     
-    $cacheComment = $data[0..($CommentSize - 1)]
-    $data = $data[$CommentSize..($data.Count - 1)]
+    $cacheComment = if ($CommentSize -gt 0) { $data[0..($CommentSize - 1)] } else { @() }
+    $data = if ($CommentSize -gt 0) { $data[$CommentSize..($data.Count - 1)] } else { $data }
     
     for ($index = 0; $index -lt $Edges.Count; $index++) {
         $parts = $data[$index] -split '\s+'
         $repoHash = $parts[0]
         $commitCount = [int]$parts[1]
         
-        $nodeHashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($Edges[$index].node.nameWithOwner))
-        $nodeHashString = -join ($nodeHashBytes | ForEach-Object { $_.ToString("x2") })
+        $nodeHashString = Get-SHA256Hash -InputString $Edges[$index].node.nameWithOwner
         
         if ($repoHash -eq $nodeHashString) {
             try {
@@ -406,10 +418,8 @@ function Clear-FlushCache {
         }
     }
     
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
     foreach ($node in $Edges) {
-        $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($node.node.nameWithOwner))
-        $hashString = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+        $hashString = Get-SHA256Hash -InputString $node.node.nameWithOwner
         $data += "$hashString 0 0 0 0"
     }
     
@@ -451,9 +461,7 @@ function Save-ForceCloseFile {
         [array]$CacheComment
     )
     
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($USER_NAME))
-    $hashString = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+    $hashString = Get-SHA256Hash -InputString $USER_NAME
     $filename = "cache/$hashString.txt"
     
     $allLines = $CacheComment + $Data
@@ -550,9 +558,7 @@ function Get-CommitCounter {
     )
     
     $totalCommits = 0
-    $hasher = [System.Security.Cryptography.SHA256]::Create()
-    $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($USER_NAME))
-    $hashString = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+    $hashString = Get-SHA256Hash -InputString $USER_NAME
     $filename = "cache/$hashString.txt"
     
     $data = Get-Content $filename
