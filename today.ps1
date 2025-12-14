@@ -364,8 +364,8 @@ function New-CacheBuilder {
         $data = Get-Content $filename
     }
     
-    $cacheComment = if ($CommentSize -gt 0) { $data[0..($CommentSize - 1)] } else { @() }
-    $data = if ($CommentSize -gt 0) { $data[$CommentSize..($data.Count - 1)] } else { $data }
+    $cacheComment = if ($CommentSize -gt 0 -and $CommentSize -le $data.Count) { $data[0..($CommentSize - 1)] } else { @() }
+    $data = if ($CommentSize -gt 0 -and $CommentSize -lt $data.Count) { $data[$CommentSize..($data.Count - 1)] } elseif ($CommentSize -ge $data.Count) { @() } else { $data }
     
     for ($index = 0; $index -lt $Edges.Count; $index++) {
         $parts = $data[$index] -split '\s+'
@@ -429,6 +429,13 @@ function Clear-FlushCache {
 function Add-Archive {
     $data = Get-Content "cache/repository_archive.txt"
     $oldData = $data
+    
+    # Validate array bounds before slicing
+    if ($data.Count -lt 11) {
+        Write-Warning "repository_archive.txt has insufficient data"
+        return @(0, 0, 0, 0, 0)
+    }
+    
     $data = $data[7..($data.Count - 4)]
     
     $addedLoc = 0
@@ -562,7 +569,7 @@ function Get-CommitCounter {
     $filename = "cache/$hashString.txt"
     
     $data = Get-Content $filename
-    $data = $data[$CommentSize..($data.Count - 1)]
+    $data = if ($CommentSize -gt 0 -and $CommentSize -lt $data.Count) { $data[$CommentSize..($data.Count - 1)] } elseif ($CommentSize -ge $data.Count) { @() } else { $data }
     
     foreach ($line in $data) {
         $parts = $line -split '\s+'
