@@ -38,7 +38,7 @@ function Get-SHA256Hash {
     param(
         [string]$InputString
     )
-    
+
     $hasher = [System.Security.Cryptography.SHA256]::Create()
     try {
         $hashBytes = $hasher.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($InputString))
@@ -47,6 +47,21 @@ function Get-SHA256Hash {
     finally {
         $hasher.Dispose()
     }
+}
+
+function Remove-EscapedBang {
+    # PowerShell 7 on macOS/Linux adds backslash before ! in strings
+    # This breaks GraphQL queries - remove the spurious backslash
+    param([string]$Text)
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($Text)
+    $result = [System.Collections.Generic.List[byte]]::new()
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 0x5C -and ($i + 1) -lt $bytes.Length -and $bytes[$i + 1] -eq 0x21) {
+            continue  # Skip backslash before !
+        }
+        $result.Add($bytes[$i])
+    }
+    return [System.Text.Encoding]::UTF8.GetString($result.ToArray())
 }
 
 function Get-DailyReadme {
@@ -66,7 +81,10 @@ function Invoke-SimpleRequest {
         [string]$Query,
         [hashtable]$Variables
     )
-    
+
+    # PowerShell 7 on macOS/Linux escapes ! in here-strings - fix it
+    $Query = Remove-EscapedBang -Text $Query
+
     $body = @{
         query = $Query
         variables = $Variables
@@ -117,7 +135,7 @@ function Get-GraphReposStars {
     param(
         [string]$CountType,
         [string[]]$OwnerAffiliation,
-        [string]$Cursor = $null
+        $Cursor = $null  # Not typed as [string] so $null stays null
     )
     
     $script:QUERY_COUNT.graph_repos_stars++
@@ -146,12 +164,15 @@ query (`$owner_affiliation: [RepositoryAffiliation], `$login: String!, `$cursor:
 }
 "@
     
+    # Only include cursor if it has a value
     $variables = @{
         owner_affiliation = $OwnerAffiliation
         login = $USER_NAME
-        cursor = $Cursor
     }
-    
+    if ($null -ne $Cursor -and $Cursor -ne "") {
+        $variables['cursor'] = $Cursor
+    }
+
     $result = Invoke-SimpleRequest -FuncName "Get-GraphReposStars" -Query $query -Variables $variables
     
     if ($CountType -eq "repos") {
@@ -171,9 +192,9 @@ function Get-RecursiveLoc {
         [int]$AdditionTotal = 0,
         [int]$DeletionTotal = 0,
         [int]$MyCommits = 0,
-        [string]$Cursor = $null
+        $Cursor = $null  # Not typed as [string] so $null stays null
     )
-    
+
     $script:QUERY_COUNT.recursive_loc++
     
     $query = @"
@@ -210,21 +231,27 @@ query (`$repo_name: String!, `$owner: String!, `$cursor: String) {
 }
 "@
     
+    # Only include cursor if it has a value (GraphQL treats null differently than omitted)
     $variables = @{
         repo_name = $RepoName
         owner = $Owner
-        cursor = $Cursor
     }
-    
+    if ($null -ne $Cursor -and $Cursor -ne "") {
+        $variables['cursor'] = $Cursor
+    }
+
+    # PowerShell 7 on macOS/Linux escapes ! in here-strings - fix it
+    $query = Remove-EscapedBang -Text $query
+
     $body = @{
         query = $query
         variables = $variables
     } | ConvertTo-Json -Depth 10
-    
+
     try {
         $response = Invoke-RestMethod -Uri "https://api.github.com/graphql" -Method Post -Headers $HEADERS -Body $body
-        
-        if ($response.data.repository.defaultBranchRef -ne $null) {
+
+        if ($null -ne $response.data.repository.defaultBranchRef) {
             return Get-LocCounterOneRepo -Owner $Owner -RepoName $RepoName -Data $Data -CacheComment $CacheComment `
                 -History $response.data.repository.defaultBranchRef.target.history `
                 -AdditionTotal $AdditionTotal -DeletionTotal $DeletionTotal -MyCommits $MyCommits
@@ -255,7 +282,7 @@ function Get-LocCounterOneRepo {
     )
     
     foreach ($node in $History.edges) {
-        if ($node.node.author.user -ne $null -and $node.node.author.user.id -eq $script:OWNER_ID.id) {
+        if ($null -ne $node.node.author.user -and $node.node.author.user.id -eq $script:OWNER_ID.id) {
             $MyCommits++
             $AdditionTotal += $node.node.additions
             $DeletionTotal += $node.node.deletions
@@ -277,7 +304,7 @@ function Get-LocQuery {
         [string[]]$OwnerAffiliation,
         [int]$CommentSize = 0,
         [bool]$ForceCache = $false,
-        [string]$Cursor = $null,
+        $Cursor = $null,  # Not typed as [string] so $null stays null
         [array]$Edges = @()
     )
     
@@ -312,12 +339,15 @@ query (`$owner_affiliation: [RepositoryAffiliation], `$login: String!, `$cursor:
 }
 "@
     
+    # Only include cursor if it has a value
     $variables = @{
         owner_affiliation = $OwnerAffiliation
         login = $USER_NAME
-        cursor = $Cursor
     }
-    
+    if ($null -ne $Cursor -and $Cursor -ne "") {
+        $variables['cursor'] = $Cursor
+    }
+
     $result = Invoke-SimpleRequest -FuncName "Get-LocQuery" -Query $query -Variables $variables
     
     if ($result.data.user.repositories.pageInfo.hasNextPage) {
@@ -363,7 +393,12 @@ function New-CacheBuilder {
     $cacheComment = if ($CommentSize -gt 0 -and $CommentSize -le $data.Count) { $data[0..($CommentSize - 1)] } else { @() }
     $data = if ($CommentSize -gt 0 -and $CommentSize -lt $data.Count) { $data[$CommentSize..($data.Count - 1)] } elseif ($CommentSize -ge $data.Count) { @() } else { $data }
     
+    $totalRepos = $Edges.Count
     for ($index = 0; $index -lt $Edges.Count; $index++) {
+        $repoName = $Edges[$index].node.nameWithOwner
+        $percentComplete = [math]::Round((($index + 1) / $totalRepos) * 100)
+        Write-Progress -Activity "Processing repositories for LOC" -Status "[$($index + 1)/$totalRepos] $repoName" -PercentComplete $percentComplete
+
         # Ensure cache data has enough entries
         if ($index -ge $data.Count) {
             Write-Warning "Cache file has fewer entries than expected. Rebuilding cache."
@@ -372,21 +407,21 @@ function New-CacheBuilder {
             if ($CommentSize -gt 0 -and $CommentSize -lt $data.Count) { $data = $data[$CommentSize..($data.Count - 1)] }
             elseif ($CommentSize -ge $data.Count) { $data = @() }
         }
-        
+
         $parts = $data[$index] -split '\s+'
         if ($parts.Count -lt 5) {
             Write-Warning "Invalid cache line at index $index. Skipping."
             continue
         }
-        
+
         $repoHash = $parts[0]
         $commitCount = [int]$parts[1]
-        
+
         $nodeHashString = Get-SHA256Hash -InputString $Edges[$index].node.nameWithOwner
-        
+
         if ($repoHash -eq $nodeHashString) {
             try {
-                if ($Edges[$index].node.defaultBranchRef -ne $null -and 
+                if ($null -ne $Edges[$index].node.defaultBranchRef -and
                     $commitCount -ne $Edges[$index].node.defaultBranchRef.target.history.totalCount) {
                     $ownerRepo = $Edges[$index].node.nameWithOwner -split '/'
                     $loc = Get-RecursiveLoc -Owner $ownerRepo[0] -RepoName $ownerRepo[1] -Data $data -CacheComment $cacheComment
@@ -394,10 +429,12 @@ function New-CacheBuilder {
                 }
             }
             catch {
+                Write-Warning "Error processing $($Edges[$index].node.nameWithOwner): $_"
                 $data[$index] = "$repoHash 0 0 0 0"
             }
         }
     }
+    Write-Progress -Activity "Processing repositories for LOC" -Completed
     
     $allLines = $cacheComment + $data
     Set-Content -Path $filename -Value $allLines
