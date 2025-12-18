@@ -5,11 +5,14 @@
 
 $ErrorActionPreference = "Stop"
 
-if (Test-Path ".\env.ps1") {
-    . .\env.ps1
-}
-else {
-    throw "env.ps1 file not found! Please create it with your ACCESS_TOKEN and USER_NAME environment variables."
+# Check for environment variables (GitHub Actions) first, fall back to env.ps1 (local dev)
+if (-not $env:ACCESS_TOKEN -or -not $env:USER_NAME) {
+    if (Test-Path ".\env.ps1") {
+        . .\env.ps1
+    }
+    else {
+        throw "Environment variables ACCESS_TOKEN and USER_NAME not set, and env.ps1 file not found!"
+    }
 }
 
 if (Test-Path ".\config.ps1") {
