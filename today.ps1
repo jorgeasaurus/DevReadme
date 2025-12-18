@@ -5,6 +5,20 @@
 
 $ErrorActionPreference = "Stop"
 
+if (Test-Path ".\env.ps1") {
+    . .\env.ps1
+}
+else {
+    throw "env.ps1 file not found! Please create it with your ACCESS_TOKEN and USER_NAME environment variables."
+}
+
+if (Test-Path ".\config.ps1") {
+    . .\config.ps1
+}
+else {
+    throw "config.ps1 file not found! Please create it from the template."
+}
+
 $HEADERS = @{
     Authorization = "token $env:ACCESS_TOKEN"
     "Content-Type" = "application/json"
@@ -37,31 +51,13 @@ function Get-SHA256Hash {
 
 function Get-DailyReadme {
     param(
-        [DateTime]$Birthday
+        [int]$BirthYear
     )
-    
-    $today = Get-Date
-    $years = $today.Year - $Birthday.Year
-    $months = $today.Month - $Birthday.Month
-    $days = $today.Day - $Birthday.Day
-    
-    if ($days -lt 0) {
-        $months--
-        $prevMonth = if ($today.Month -eq 1) { 12 } else { $today.Month - 1 }
-        $prevYear = if ($today.Month -eq 1) { $today.Year - 1 } else { $today.Year }
-        $days += [DateTime]::DaysInMonth($prevYear, $prevMonth)
-    }
-    if ($months -lt 0) {
-        $years--
-        $months += 12
-    }
-    
+
+    $years = (Get-Date).Year - $BirthYear
     $yearPlural = if ($years -ne 1) { "s" } else { "" }
-    $monthPlural = if ($months -ne 1) { "s" } else { "" }
-    $dayPlural = if ($days -ne 1) { "s" } else { "" }
-    $cake = if ($months -eq 0 -and $days -eq 0) { " 🎂" } else { "" }
-    
-    return "$years year$yearPlural, $months month$monthPlural, $days day$dayPlural$cake"
+
+    return "$years year$yearPlural"
 }
 
 function Invoke-SimpleRequest {
@@ -699,11 +695,11 @@ $accDate = $userData[0][1]
 Write-Formatter -QueryType "account data" -Difference $userData[1]
 
 # Calculate age
-$ageData = Measure-PerfCounter -ScriptBlock { Get-DailyReadme -Birthday ([DateTime]::new(2002, 7, 5)) }
+$ageData = Measure-PerfCounter -ScriptBlock { Get-DailyReadme -BirthYear $Config.BirthYear }
 Write-Formatter -QueryType "age calculation" -Difference $ageData[1]
 
 # Get LOC data
-$totalLoc = Measure-PerfCounter -ScriptBlock { Get-LocQuery -OwnerAffiliation @('OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER') -CommentSize 7 }
+$totalLoc = Measure-PerfCounter -ScriptBlock { Get-LocQuery -OwnerAffiliation @('OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER') -CommentSize $Config.CacheCommentSize }
 if ($totalLoc[0][3]) {
     Write-Formatter -QueryType "LOC (cached)" -Difference $totalLoc[1]
 }
@@ -712,7 +708,7 @@ else {
 }
 
 # Get commit data
-$commitData = Measure-PerfCounter -ScriptBlock { Get-CommitCounter -CommentSize 7 }
+$commitData = Measure-PerfCounter -ScriptBlock { Get-CommitCounter -CommentSize $Config.CacheCommentSize }
 
 # Get star data
 $starData = Measure-PerfCounter -ScriptBlock { Get-GraphReposStars -CountType "stars" -OwnerAffiliation @('OWNER') }
@@ -726,14 +722,18 @@ $contribData = Measure-PerfCounter -ScriptBlock { Get-GraphReposStars -CountType
 # Get follower data
 $followerData = Measure-PerfCounter -ScriptBlock { Get-FollowerGetter -Username $USER_NAME }
 
-# Add archived data if this is the specific user
-if ($script:OWNER_ID.id -eq 'MDQ6VXNlcjU3MzMxMTM0') {
-    $archivedData = Add-Archive
-    for ($i = 0; $i -lt ($totalLoc[0].Count - 1); $i++) {
-        $totalLoc[0][$i] += $archivedData[$i]
+# Add archived data if repository_archive.txt exists and has data
+# To use: create cache/repository_archive.txt with your archived repo data
+if (Test-Path "cache/repository_archive.txt") {
+    $archiveContent = Get-Content "cache/repository_archive.txt"
+    if ($archiveContent.Count -ge 11) {
+        $archivedData = Add-Archive
+        for ($i = 0; $i -lt ($totalLoc[0].Count - 1); $i++) {
+            $totalLoc[0][$i] += $archivedData[$i]
+        }
+        $contribData[0] += $archivedData[-1]
+        $commitData[0] += [int]$archivedData[-2]
     }
-    $contribData[0] += $archivedData[-1]
-    $commitData[0] += [int]$archivedData[-2]
 }
 
 # Format LOC data
@@ -742,11 +742,11 @@ for ($i = 0; $i -lt ($totalLoc[0].Count - 1); $i++) {
 }
 
 # Update SVG files
-Update-SvgOverwrite -Filename "dark_mode.svg" -AgeData $ageData[0] -CommitData $commitData[0] `
+Update-SvgOverwrite -Filename $Config.OutputFiles.Dark -AgeData $ageData[0] -CommitData $commitData[0] `
     -StarData $starData[0] -RepoData $repoData[0] -ContribData $contribData[0] `
     -FollowerData $followerData[0] -LocData $totalLoc[0][0..($totalLoc[0].Count - 2)]
 
-Update-SvgOverwrite -Filename "light_mode.svg" -AgeData $ageData[0] -CommitData $commitData[0] `
+Update-SvgOverwrite -Filename $Config.OutputFiles.Light -AgeData $ageData[0] -CommitData $commitData[0] `
     -StarData $starData[0] -RepoData $repoData[0] -ContribData $contribData[0] `
     -FollowerData $followerData[0] -LocData $totalLoc[0][0..($totalLoc[0].Count - 2)]
 
