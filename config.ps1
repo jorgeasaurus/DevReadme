@@ -60,7 +60,7 @@ $Config = @{
     # Adjust these if you need to change the SVG dimensions
     Layout = @{
         Width      = 985
-        Height     = 530
+        Height     = 610
         FontSize   = 16
         AsciiX     = 15
         ContentX   = 390

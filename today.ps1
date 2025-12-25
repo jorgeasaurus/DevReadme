@@ -558,18 +558,40 @@ function Update-SvgOverwrite {
         [int]$FollowerData,
         [array]$LocData
     )
-    
+
     [xml]$svg = Get-Content $Filename
-    
-    Update-JustifyFormat -Root $svg -ElementId "commit_data" -NewText $CommitData -Length 22
-    Update-JustifyFormat -Root $svg -ElementId "star_data" -NewText $StarData -Length 14
-    Update-JustifyFormat -Root $svg -ElementId "repo_data" -NewText $RepoData -Length 6
-    Update-JustifyFormat -Root $svg -ElementId "contrib_data" -NewText $ContribData
-    Update-JustifyFormat -Root $svg -ElementId "follower_data" -NewText $FollowerData -Length 10
-    Update-JustifyFormat -Root $svg -ElementId "loc_data" -NewText $LocData[2] -Length 9
+
+    # TargetWidth from config is 56
+    # Length = TargetWidth - keyLength - 1 (colon) - 2 (spaces around dots)
+    # Repos: 56 - 5 - 1 - 2 = 48
+    Update-JustifyFormat -Root $svg -ElementId "repo_data" -NewText $RepoData -Length 48
+    # Contributed: 56 - 11 - 1 - 2 = 42
+    Update-JustifyFormat -Root $svg -ElementId "contrib_data" -NewText $ContribData -Length 42
+    # Stars: 56 - 5 - 1 - 2 = 48
+    Update-JustifyFormat -Root $svg -ElementId "star_data" -NewText $StarData -Length 48
+    # Commits: 56 - 7 - 1 - 2 = 46
+    Update-JustifyFormat -Root $svg -ElementId "commit_data" -NewText $CommitData -Length 46
+    # Followers: 56 - 9 - 1 - 2 = 44
+    Update-JustifyFormat -Root $svg -ElementId "follower_data" -NewText $FollowerData -Length 44
+    # Lines of Code: 56 - 13 - 1 - 2 = 40
+    Update-JustifyFormat -Root $svg -ElementId "loc_data" -NewText $LocData[2] -Length 40
+    # (+/-): For additions, no dots needed (it's part of the combined value)
     Update-JustifyFormat -Root $svg -ElementId "loc_add" -NewText $LocData[0]
-    Update-JustifyFormat -Root $svg -ElementId "loc_del" -NewText $LocData[1] -Length 7
-    
+    # (+/-): For the combined line, calculate based on both values
+    # Need to update the dots for the combined "(+/-):" line
+    # Combined value format: "123++, 456--"
+    $addDelValue = ("{0:N0}" -f $LocData[0]) + "++, " + ("{0:N0}" -f $LocData[1]) + "--"
+    # (+/-): 56 - 5 - 1 - 2 = 48, minus the combined value length
+    $addDelLength = 48 - $addDelValue.Length
+    if ($addDelLength -le 2) {
+        $addDelDots = @('', ' ', '. ')[$addDelLength]
+    }
+    else {
+        $addDelDots = ' ' + ('.' * $addDelLength) + ' '
+    }
+    Set-FindAndReplace -Root $svg -ElementId "loc_add_del_dots" -NewText $addDelDots
+    Update-JustifyFormat -Root $svg -ElementId "loc_del" -NewText $LocData[1]
+
     $svg.Save((Resolve-Path $Filename).Path)
 }
 

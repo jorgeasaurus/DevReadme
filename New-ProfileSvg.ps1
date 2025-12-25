@@ -161,38 +161,91 @@ text, tspan {white-space: pre;}
     $svg += "-"
     $y += $layout.LineHeight
 
-    # GitHub Stats - Repos and Stars line
+    # GitHub Stats - Individual lines matching Show-Neofetch.ps1
+    # Repos
+    $repoDots = Get-DotJustifiedLine -Key "Repos" -Value "0" -TargetWidth $targetWidth
     $svg += "`n<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
     $svg += "<tspan class=`"key`">Repos</tspan>:"
-    $svg += "<tspan class=`"cc`" id=`"repo_data_dots`"> .... </tspan>"
+    $svg += "<tspan class=`"cc`" id=`"repo_data_dots`"> $repoDots </tspan>"
     $svg += "<tspan class=`"value`" id=`"repo_data`">0</tspan>"
-    $svg += " {<tspan class=`"key`">Contributed</tspan>: <tspan class=`"value`" id=`"contrib_data`">0</tspan>}"
-    $svg += " | <tspan class=`"key`">Stars</tspan>:"
-    $svg += "<tspan class=`"cc`" id=`"star_data_dots`"> ........... </tspan>"
+    $y += $layout.LineHeight
+
+    # Contributed
+    $contribDots = Get-DotJustifiedLine -Key "Contributed" -Value "0" -TargetWidth $targetWidth
+    $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
+    $svg += "<tspan class=`"key`">Contributed</tspan>:"
+    $svg += "<tspan class=`"cc`" id=`"contrib_data_dots`"> $contribDots </tspan>"
+    $svg += "<tspan class=`"value`" id=`"contrib_data`">0</tspan>"
+    $y += $layout.LineHeight
+
+    # Stars
+    $starDots = Get-DotJustifiedLine -Key "Stars" -Value "0" -TargetWidth $targetWidth
+    $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
+    $svg += "<tspan class=`"key`">Stars</tspan>:"
+    $svg += "<tspan class=`"cc`" id=`"star_data_dots`"> $starDots </tspan>"
     $svg += "<tspan class=`"value`" id=`"star_data`">0</tspan>"
     $y += $layout.LineHeight
 
-    # GitHub Stats - Commits and Followers line
+    # Commits
+    $commitDots = Get-DotJustifiedLine -Key "Commits" -Value "0" -TargetWidth $targetWidth
     $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
     $svg += "<tspan class=`"key`">Commits</tspan>:"
-    $svg += "<tspan class=`"cc`" id=`"commit_data_dots`"> ..................... </tspan>"
+    $svg += "<tspan class=`"cc`" id=`"commit_data_dots`"> $commitDots </tspan>"
     $svg += "<tspan class=`"value`" id=`"commit_data`">0</tspan>"
-    $svg += " | <tspan class=`"key`">Followers</tspan>:"
-    $svg += "<tspan class=`"cc`" id=`"follower_data_dots`"> ........ </tspan>"
+    $y += $layout.LineHeight
+
+    # Followers
+    $followerDots = Get-DotJustifiedLine -Key "Followers" -Value "0" -TargetWidth $targetWidth
+    $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
+    $svg += "<tspan class=`"key`">Followers</tspan>:"
+    $svg += "<tspan class=`"cc`" id=`"follower_data_dots`"> $followerDots </tspan>"
     $svg += "<tspan class=`"value`" id=`"follower_data`">0</tspan>"
     $y += $layout.LineHeight
 
-    # GitHub Stats - Lines of Code line
+    # Lines of Code
+    $locDots = Get-DotJustifiedLine -Key "Lines of Code" -Value "0" -TargetWidth $targetWidth
     $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
-    $svg += "<tspan class=`"key`">Lines of Code on GitHub</tspan>:"
-    $svg += "<tspan class=`"cc`" id=`"loc_data_dots`"> ........ </tspan>"
+    $svg += "<tspan class=`"key`">Lines of Code</tspan>:"
+    $svg += "<tspan class=`"cc`" id=`"loc_data_dots`"> $locDots </tspan>"
     $svg += "<tspan class=`"value`" id=`"loc_data`">0</tspan>"
-    $svg += " ( <tspan class=`"addColor`" id=`"loc_add`">0</tspan><tspan class=`"addColor`">++</tspan>,"
-    $svg += " <tspan id=`"loc_del_dots`"> ...... </tspan>"
-    $svg += "<tspan class=`"delColor`" id=`"loc_del`">0</tspan><tspan class=`"delColor`">--</tspan> )"
+    $y += $layout.LineHeight
 
-    # Close text and SVG
-    $svg += "`n</text>`n</svg>`n"
+    # Additions/Deletions on separate line - special case with two values
+    # Use a placeholder value that represents typical combined length
+    $addDelValue = "0++, 0--"
+    $addDelDots = Get-DotJustifiedLine -Key "(+/-)" -Value $addDelValue -TargetWidth $targetWidth
+    $svg += "<tspan x=`"$contentX`" y=`"$y`" class=`"cc`">. </tspan>"
+    $svg += "<tspan class=`"key`">(+/-)</tspan>:"
+    $svg += "<tspan class=`"cc`" id=`"loc_add_del_dots`"> $addDelDots </tspan>"
+    $svg += "<tspan class=`"addColor`" id=`"loc_add`">0</tspan><tspan class=`"addColor`">++</tspan>, "
+    $svg += "<tspan class=`"delColor`" id=`"loc_del`">0</tspan><tspan class=`"delColor`">--</tspan>"
+
+    # Close text element
+    $svg += "`n</text>"
+
+    # Add color palette at the bottom (similar to neofetch)
+    # Standard terminal colors adapted for dark/light mode
+    if ($Mode -eq "Dark") {
+        # Bright colors for dark mode
+        $paletteColors = @("#555753", "#ef2929", "#8ae234", "#fce94f", "#729fcf", "#ad7fa8", "#34e2e2", "#eeeeec")
+    }
+    else {
+        # Darker colors for light mode
+        $paletteColors = @("#2e3436", "#cc0000", "#4e9a06", "#c4a000", "#3465a4", "#75507b", "#06989a", "#555753")
+    }
+
+    $paletteY = $y + ($layout.LineHeight * 2.5)
+    $paletteX = $contentX
+    $rectWidth = 24
+    $rectHeight = 16
+
+    for ($i = 0; $i -lt $paletteColors.Length; $i++) {
+        $x = $paletteX + ($i * $rectWidth)
+        $svg += "`n  <rect x=`"$x`" y=`"$paletteY`" width=`"$rectWidth`" height=`"$rectHeight`" fill=`"$($paletteColors[$i])`" rx=`"2`" />"
+    }
+
+    # Close SVG
+    $svg += "`n</svg>`n"
 
     return $svg
 }
